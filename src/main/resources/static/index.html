@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elasticsearch 통합검색 데모</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <style>
+        /* Base Styles */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        /* Layout */
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+
+        .row {
+            display: flex;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .col {
+            flex: 1;
+        }
+
+        .col-main {
+            flex: 1 1 auto;
+            min-width: 0;
+            /* Prevent main content from overlapping sidebar by clipping horizontal overflow */
+            overflow-x: hidden;
+        }
+
+        .col-sidebar {
+            flex: 0 0 320px;
+            max-width: 360px;
+        }
+
+        /* Form Elements */
+        .search-input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+        }
+
+        .search-button {
+            padding: 10px 16px;
+            margin-left: 30px;
+        }
+
+        .size-select {
+            padding: 10px 16px;
+            margin-left: 8px;
+        }
+
+        /* Pills */
+        .pill {
+            display: inline-block;
+            padding: 6px 10px;
+            margin: 4px;
+            background: #f0f0f0;
+            border-radius: 16px;
+            cursor: pointer;
+        }
+
+        .pill:hover {
+            background: #e0e0e0;
+        }
+
+        /* Results */
+        .result {
+            border-bottom: 1px solid #eee;
+            padding: 8px 0;
+        }
+
+        .results-container {
+            margin-top: 24px;
+            max-width: 100%;
+            overflow: hidden; /* ensure inner overflows don't leak outside column */
+        }
+
+        .result-pre {
+            background: #fafafa;
+            padding: 8px;
+            overflow: auto;
+        }
+
+        /* Result Split View */
+        .result-split {
+            display: flex;
+            gap: 12px;
+        }
+        .json-pane {
+            flex: 0 0 55%;
+            min-width: 0;
+        }
+        .parsed-pane {
+            flex: 1 1 45%;
+            background: #fff;
+            border-left: 4px solid #f5f5f5;
+            padding-left: 8px;
+        }
+        .parsed-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        .parsed-table th, .parsed-table td {
+            text-align: left;
+            vertical-align: top;
+            padding: 4px 6px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .parsed-table th {
+            width: 160px;
+            color: #333;
+            background: #fafafa;
+        }
+        .kv-muted {
+            color: #888;
+            font-size: 12px;
+        }
+
+        @media (max-width: 800px) {
+            .result-split {
+                flex-direction: column;
+            }
+            .parsed-table th {
+                width: 40%;
+            }
+        }
+
+        /* Text Styles */
+        .muted {
+            color: #777;
+            font-size: 12px;
+        }
+
+        .section-title {
+            margin-top: 0;
+            margin-bottom: 16px;
+        }
+
+        /* Sections */
+        .section {
+            margin-top: 24px;
+        }
+
+        .sidebar-section {
+            margin-top: 24px;
+        }
+
+        /* Containers */
+        .popular-container {
+            min-height: 40px;
+        }
+
+        .recent-container {
+            min-height: 40px;
+        }
+
+        .local-recent-container {
+            margin-top: 16px;
+        }
+
+        .search-form {
+            display: flex;
+            align-items: center;
+        }
+
+        .search-input-wrapper {
+            flex: 1;
+            position: relative; /* for suggestions dropdown positioning */
+        }
+
+        /* Autocomplete suggestions */
+        .suggest-list {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: #fff;
+            border: 1px solid #ddd;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            z-index: 1000;
+            max-height: 240px;
+            overflow-y: auto;
+            display: none;
+        }
+        .suggest-item {
+            padding: 8px 10px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .suggest-item:hover, .suggest-item.active {
+            background: #f5f5f5;
+        }
+
+        .no-data-message {
+            color: #777;
+            font-size: 14px;
+            padding: 8px 0;
+        }
+        /* Sidebar and pills wrapping */
+        .popular-container, .recent-container, .local-recent-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px;
+        }
+
+        /* Responsive layout for columns */
+        @media (max-width: 1100px) {
+            .row {
+                flex-direction: column;
+            }
+            .col-sidebar {
+                flex: 1 1 auto;
+                max-width: none;
+            }
+        }
+
+        /* Pagination */
+        .pagination { margin-top: 16px; display: none; user-select: none; }
+        .pagination .page-btn {
+            display: inline-block; padding: 6px 10px; margin: 0 4px; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; color: #333; background: #fff;
+        }
+        .pagination .page-btn:hover { background: #f5f5f5; }
+        .pagination .page-btn.disabled { color: #aaa; border-color: #eee; background: #fafafa; cursor: default; }
+        .pagination .page-btn.active { background: #1976d2; color: #fff; border-color: #1976d2; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>Elasticsearch 통합검색 데모</h2>
+    <div class="row">
+        <div class="col col-main">
+            <div class="search-form">
+                <div class="search-input-wrapper">
+                    <input id="q" type="text" class="search-input" placeholder="검색어를 입력하세요 (예: 상품명)" />
+                    <div id="suggestList" class="suggest-list"></div>
+                </div>
+                <button id="btnSearch" class="search-button">검색</button>
+                <select id="size" class="size-select" disabled title="페이지당 결과수는 10개 고정입니다">
+                    <option value="10" selected>10</option>
+                </select>
+            </div>
+            <div id="results" class="results-container"></div>
+            <div id="pagination" class="pagination"></div>
+        </div>
+        <div class="col col-sidebar">
+            <div class="sidebar-section">
+                <h3 class="section-title">인기 검색어</h3>
+                <div id="popular" class="popular-container"></div>
+            </div>
+            <div class="sidebar-section">
+                <h3 class="section-title">최근 검색어</h3>
+                <div id="recent" class="recent-container"></div>
+                <div class="muted">(브라우저 로컬 최근 검색도 함께 저장됩니다)</div>
+                <div id="localRecent" class="local-recent-container"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function renderPills(container, items, field='keyword', suffixField) {
+        const $c = $(container).empty();
+        if (!items || items.length === 0) {
+            $c.append('<div class="no-data-message">데이터 없음</div>');
+            return;
+        }
+        items.forEach(it => {
+            const text = suffixField ? (it[field] + ' (' + it[suffixField] + ')') : it[field];
+            const $p = $('<span class="pill"></span>').text(text);
+            $p.on('click', () => {
+                $('#q').val(it[field]);
+                doSearch();
+            });
+            $c.append($p);
+        });
+    }
+
+    function saveLocalRecent(q) {
+        if (!q) return;
+        const key = 'localRecentKeywords';
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        const filtered = [q, ...arr.filter(x => x !== q)].slice(0, 10);
+        localStorage.setItem(key, JSON.stringify(filtered));
+        renderLocalRecent();
+    }
+
+    function renderLocalRecent() {
+        const key = 'localRecentKeywords';
+        const arr = JSON.parse(localStorage.getItem(key) || '[]');
+        renderPills('#localRecent', arr.map(k => ({keyword:k})), 'keyword');
+    }
+
+    function valuePreview(val, maxLen = 200) {
+        if (val === null || val === undefined) return '<span class="kv-muted">(null)</span>';
+        if (typeof val === 'string') {
+            const clean = val.replace(/\s+/g, ' ').trim();
+            return clean.length > maxLen ? clean.slice(0, maxLen) + '…' : clean;
+        }
+        if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+        if (Array.isArray(val)) {
+            const arr = val.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v));
+            const s = arr.join(', ');
+            return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
+        }
+        // object
+        const s = JSON.stringify(val);
+        return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
+    }
+
+    function buildParsedTable(obj) {
+        const $table = $('<table class="parsed-table"></table>');
+        const keys = Object.keys(obj || {});
+        if (keys.length === 0) {
+            $table.append('<tr><td><span class="kv-muted">표시할 데이터가 없습니다</span></td></tr>');
+            return $table;
+        }
+        keys.forEach(k => {
+            const v = obj[k];
+            const $tr = $('<tr></tr>');
+            $tr.append('<th>'+ k +'</th>');
+            $tr.append('<td>'+ valuePreview(v) +'</td>');
+            $table.append($tr);
+        });
+        return $table;
+    }
+
+    function buildParsedPane(doc) {
+        const $pane = $('<div class="parsed-pane"></div>');
+        // Prefer _source if present
+        const src = (doc && (doc._source || doc.source || doc.document)) || doc;
+        // Header hints
+        const headerParts = [];
+        if (doc && doc._index) headerParts.push('index: '+ doc._index);
+        if (doc && doc._id) headerParts.push('id: '+ doc._id);
+        if (doc && (doc._score !== undefined)) headerParts.push('score: '+ doc._score);
+        if (headerParts.length) {
+            $pane.append('<div class="kv-muted" style="margin-bottom:6px;">'+ headerParts.join(' · ') +'</div>');
+        }
+        $pane.append(buildParsedTable(src));
+        return $pane;
+    }
+
+    function renderResults(list) {
+        const $c = $('#results').empty();
+        if (!list || list.length === 0) {
+            $c.append('<div class="no-data-message">검색 결과가 없습니다</div>');
+            return;
+        }
+        list.forEach(doc => {
+            const $r = $('<div class="result result-split"></div>');
+            const $left = $('<div class="json-pane"></div>');
+            $left.append('<pre class="result-pre">'+ JSON.stringify(doc, null, 2) +'</pre>');
+            const $right = buildParsedPane(doc);
+            $r.append($left).append($right);
+            $c.append($r);
+        });
+    }
+
+    function refreshSidebars() {
+        $.get('/api/popular?limit=10').done(data => {
+            renderPills('#popular', (data && data.items) || [], 'keyword', 'count');
+        });
+        $.get('/api/recent?limit=10').done(data => {
+            renderPills('#recent', (data && data.items) || [], 'keyword');
+        });
+        renderLocalRecent();
+    }
+
+    // ===== Pagination state =====
+    let currentPage = 1;
+    let totalPages = 1;
+    let lastQuery = '';
+
+    function renderPagination() {
+        const $p = $('#pagination').empty();
+        if (totalPages <= 1) { $p.hide(); return; }
+        $p.show();
+        const makeBtn = (label, page, disabled=false, active=false) => {
+            const $b = $('<span class="page-btn"></span>').text(label);
+            if (disabled) { $b.addClass('disabled'); return $b; }
+            if (active) { $b.addClass('active'); return $b; }
+            $b.on('click', () => { if (page && page !== currentPage) doSearch(page); });
+            return $b;
+        };
+        // First / Prev
+        $p.append(makeBtn('« 처음', 1, currentPage === 1));
+        $p.append(makeBtn('‹ 이전', Math.max(1, currentPage - 1), currentPage === 1));
+        // Page numbers (window of 5)
+        const windowSize = 5;
+        let start = Math.max(1, currentPage - Math.floor(windowSize/2));
+        let end = Math.min(totalPages, start + windowSize - 1);
+        start = Math.max(1, end - windowSize + 1);
+        for (let i = start; i <= end; i++) {
+            const active = (i === currentPage);
+            const btn = makeBtn(String(i), i, false, active);
+            $p.append(btn);
+        }
+        // Next / Last
+        $p.append(makeBtn('다음 ›', Math.min(totalPages, currentPage + 1), currentPage === totalPages));
+        $p.append(makeBtn('마지막 »', totalPages, currentPage === totalPages));
+    }
+
+    function doSearch(page = 1) {
+        const q = $('#q').val().trim();
+        const size = 10; // fixed page size per requirement
+        if (!q) {
+            // allow wildcard search
+        }
+        $.get('/api/search', { q, size, page }).done(resp => {
+            renderResults(resp.results);
+            lastQuery = resp.query || q;
+            currentPage = resp.page || page;
+            totalPages = resp.totalPages || 1;
+            renderPagination();
+            saveLocalRecent(resp.query);
+            refreshSidebars();
+        }).fail(err => {
+            alert('검색 중 오류가 발생했습니다: ' + (err.responseJSON?.message || err.statusText));
+        });
+    }
+
+    // ===== Autocomplete (suggestions) =====
+    const $q = $('#q');
+    const $suggest = $('#suggestList');
+    // Move suggest list to body to avoid clipping by parent overflow/stacking contexts
+    $(function(){
+        if ($suggest.length) {
+            $('body').append($suggest);
+            $suggest.css({ position: 'fixed' });
+        }
+    });
+    let suggestItems = [];
+    let activeIndex = -1;
+
+    function debounce(fn, delay) {
+        let t;
+        return function(...args) {
+            clearTimeout(t);
+            t = setTimeout(() => fn.apply(this, args), delay);
+        };
+    }
+
+    function hideSuggest() {
+        $suggest.hide().empty();
+        suggestItems = [];
+        activeIndex = -1;
+    }
+
+    function applyActive() {
+        $suggest.children().removeClass('active');
+        if (activeIndex >= 0 && activeIndex < suggestItems.length) {
+            $suggest.children().eq(activeIndex).addClass('active');
+        }
+    }
+
+    function positionSuggest() {
+        if (!$suggest.is(':visible')) return;
+        const rect = $q[0].getBoundingClientRect();
+        $suggest.css({
+            left: rect.left + 'px',
+            top: (rect.bottom + 2) + 'px',
+            width: rect.width + 'px',
+            maxHeight: '240px',
+            zIndex: 10000
+        });
+    }
+
+    function renderSuggest(list) {
+        if (!list || list.length === 0) { hideSuggest(); return; }
+        $suggest.empty();
+        list.forEach((text, idx) => {
+            const $item = $('<div class="suggest-item"></div>').text(text);
+            $item.on('mousedown', function(e){
+                // mousedown to run before input loses focus
+                e.preventDefault();
+                $q.val(text);
+                hideSuggest();
+                doSearch();
+            });
+            $suggest.append($item);
+        });
+        suggestItems = list;
+        activeIndex = -1;
+        $suggest.show();
+        positionSuggest();
+    }
+
+    function mergeLocalSuggestions(remote, prefix) {
+        try {
+            const key = 'localRecentKeywords';
+            const arr = JSON.parse(localStorage.getItem(key) || '[]');
+            const pfx = (prefix || '').toLowerCase();
+            const locals = arr
+                .filter(k => typeof k === 'string' && (!pfx || k.toLowerCase().startsWith(pfx)));
+            const set = new Set();
+            const merged = [];
+            [...locals, ...remote].forEach(k => { if (k && !set.has(k)) { set.add(k); merged.push(k); } });
+            return merged.slice(0, 8);
+        } catch (e) { return remote; }
+    }
+
+    const fetchSuggest = debounce(function(){
+        const val = $q.val().trim();
+        if (!val) { hideSuggest(); return; }
+        $.get('/api/suggest', { prefix: val, limit: 8 }).done(data => {
+            const list = (data && data.suggestions) || [];
+            const merged = mergeLocalSuggestions(list, val);
+            renderSuggest(merged);
+        }).fail(() => hideSuggest());
+    }, 150);
+
+    $q.on('input', fetchSuggest);
+    $q.on('focus', positionSuggest);
+    $(window).on('resize scroll', positionSuggest);
+
+    // Keyboard navigation
+    $q.on('keydown', function(e){
+        if ($suggest.is(':visible')) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                if (suggestItems.length > 0) {
+                    activeIndex = (activeIndex + 1) % suggestItems.length;
+                    applyActive();
+                }
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (suggestItems.length > 0) {
+                    activeIndex = (activeIndex - 1 + suggestItems.length) % suggestItems.length;
+                    applyActive();
+                }
+            } else if (e.key === 'Enter') {
+                if (activeIndex >= 0 && activeIndex < suggestItems.length) {
+                    e.preventDefault();
+                    $q.val(suggestItems[activeIndex]);
+                    hideSuggest();
+                    doSearch();
+                    return;
+                }
+            } else if (e.key === 'Escape') {
+                hideSuggest();
+            }
+        }
+    });
+
+    // Click outside to close
+    $(document).on('click', function(e){
+        if (!$(e.target).closest('.search-input-wrapper').length && !$(e.target).closest('#suggestList').length) {
+            hideSuggest();
+        }
+    });
+
+    $('#btnSearch').on('click', function(){ hideSuggest(); doSearch(); });
+    $q.on('keypress', function(e){ if (e.which === 13) { hideSuggest(); doSearch(); } });
+
+    // 초기 로드
+    refreshSidebars();
+</script>
+</body>
+</html>

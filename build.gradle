@@ -1,0 +1,54 @@
+plugins {
+    id 'java'
+    id 'war'
+    id 'org.springframework.boot' version '3.5.6'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com'
+version = '0.0.1-SNAPSHOT'
+description = 'elasticsearch_poc'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+configurations {
+    developmentOnly
+    runtimeClasspath {
+        extendsFrom developmentOnly
+    }
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // Elasticsearch Java API Client
+    implementation 'co.elastic.clients:elasticsearch-java:8.15.3'
+    implementation 'org.apache.httpcomponents.client5:httpclient5:5.3.1'
+
+    // Thymeleaf not required for static UI, but can remain unused
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+
+    developmentOnly 'org.springframework.boot:spring-boot-devtools'
+
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
