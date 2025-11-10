@@ -15,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -34,17 +33,19 @@ public class SearchController {
     @GetMapping("/search")
     public ResponseEntity<SearchResponseDto> search(@ModelAttribute SearchRequestDto request) throws IOException {
         String q = request.getQ();
+        String field = request.getField();
         int size = request.getSize() == null ? 10 : request.getSize();
         int page = request.getPage() == null || request.getPage() < 1 ? 1 : request.getPage();
         int from = (page - 1) * size;
         prs.recordQuery(q);
-        SearchService.SearchResult sr = searchService.search(q, size, from);
+        SearchService.SearchResult sr = searchService.search(q, field, size, from);
         long total = sr.getTotal();
         int totalPages = size > 0 ? (int) Math.max(1, (long) Math.ceil((double) total / size)) : 1;
-//        SearchResponseDto resp = new SearchResponseDto(q, size, page, total, totalPages, sr.getResults());
+
         SearchResponseDto searchResponseDto = SearchResponseDto.builder()
                 .query(q)
                 .size(size)
+                .page(page)
                 .total(total)
                 .totalPages(totalPages)
                 .results(sr.getResults())

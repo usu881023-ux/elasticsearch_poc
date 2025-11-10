@@ -20,7 +20,7 @@
 
         .row {
             display: flex;
-            gap: 16px;
+            gap: 23px;
             align-items: flex-start;
         }
 
@@ -53,8 +53,9 @@
         }
 
         .size-select {
-            padding: 10px 16px;
-            margin-left: 8px;
+            padding: 13px 16px;
+            margin-left: 5px;
+            display: flex;
         }
 
         /* Pills */
@@ -244,8 +245,17 @@
                     <div id="suggestList" class="suggest-list"></div>
                 </div>
                 <button id="btnSearch" class="search-button">검색</button>
-                <select id="size" class="size-select" disabled title="페이지당 결과수는 10개 고정입니다">
+                <select id="field" class="size-select" title="검색 필드">
+                    <option value="">전체</option>
+                    <option value="goods_name_chosung">초성</option>
+                    <option value="goods_name">상품명</option>
+                    <option value="key_word">키워드</option>
+                    <option value="goods_code">상품코드</option>
+                </select>
+                <select id="size" class="size-select" title="페이지당 결과 수">
                     <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
                 </select>
             </div>
             <div id="results" class="results-container"></div>
@@ -411,11 +421,12 @@
 
     function doSearch(page = 1) {
         const q = $('#q').val().trim();
-        const size = 10; // fixed page size per requirement
+        const size = parseInt($('#size').val() || '10', 10);
+        const field = $('#field').val();
         if (!q) {
             // allow wildcard search
         }
-        $.get('/api/search', { q, size, page }).done(resp => {
+        $.get('/api/search', { q, size, page, field }).done(resp => {
             renderResults(resp.results);
             lastQuery = resp.query || q;
             currentPage = resp.page || page;
@@ -560,6 +571,10 @@
 
     $('#btnSearch').on('click', function(){ hideSuggest(); doSearch(); });
     $q.on('keypress', function(e){ if (e.which === 13) { hideSuggest(); doSearch(); } });
+    // 페이지당 결과수 변경 시 1페이지부터 다시 조회
+    $('#size').on('change', function(){ currentPage = 1; const q = $('#q').val().trim(); if (q) { doSearch(1); } });
+    // 검색 필드 변경 시, 입력값이 있으면 1페이지부터 다시 조회
+    $('#field').on('change', function(){ currentPage = 1; const q = $('#q').val().trim(); if (q) { doSearch(1); } });
 
     // 초기 로드
     refreshSidebars();
