@@ -270,14 +270,14 @@ public class SearchService {
                 log.info("Query Type: {}", request.query()._kind());
             }
         } catch (Exception e) {
-            log.debug("Could not get query type: {}", e.getMessage());
+            log.info("Could not get query type: {}", e.getMessage());
         }
         try {
             if (request.suggest() != null) {
                 log.info("Has Suggest: true");
             }
         } catch (Exception e) {
-            log.debug("Could not check suggest: {}", e.getMessage());
+            log.info("Could not check suggest: {}", e.getMessage());
         }
         if (params != null && params.length > 0) {
             log.info("Parameters: {}", java.util.Arrays.toString(params));

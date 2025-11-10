@@ -5,6 +5,7 @@ import com.elasticsearch_poc.dto.request.SearchRequestDto;
 import com.elasticsearch_poc.dto.request.SuggestRequestDto;
 import com.elasticsearch_poc.dto.response.*;
 import com.elasticsearch_poc.service.PopularRecentService;
+import com.elasticsearch_poc.service.SearchLogProducer;
 import com.elasticsearch_poc.service.SearchService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,10 +25,12 @@ public class SearchController {
 
     private final SearchService searchService;
     private final PopularRecentService prs;
+    private final SearchLogProducer searchLogProducer;
 
-    public SearchController(SearchService searchService, PopularRecentService prs) {
+    public SearchController(SearchService searchService, PopularRecentService prs, SearchLogProducer searchLogProducer) {
         this.searchService = searchService;
         this.prs = prs;
+        this.searchLogProducer = searchLogProducer;
     }
 
     @GetMapping("/search")
@@ -37,7 +40,10 @@ public class SearchController {
         int size = request.getSize() == null ? 10 : request.getSize();
         int page = request.getPage() == null || request.getPage() < 1 ? 1 : request.getPage();
         int from = (page - 1) * size;
-        prs.recordQuery(q);
+        
+        // Kafka를 통해 검색 로그 전송 (비동기)
+        searchLogProducer.sendSearchLog(q, null);
+        
         SearchService.SearchResult sr = searchService.search(q, field, size, from);
         long total = sr.getTotal();
         int totalPages = size > 0 ? (int) Math.max(1, (long) Math.ceil((double) total / size)) : 1;
